@@ -1,0 +1,38 @@
+node {
+    stage("Git Clone"){
+git credentialsId: 'GIT_CREDENTIALS', url: 'https://fallewi/terraform-ansible-jenkins-ci-cd:webk8sapp.git'
+    }
+     stage('maven Build') {
+       sh './mvn build'
+    }
+    stage("Docker build"){
+        sh 'docker version'
+        sh 'docker build -t webk8sapp.'
+        sh 'docker image list'
+        sh 'docker tag webapp fallewi/terraform-ansible-jenkins-ci-cd:webk8sapp'
+    }
+    withCredentials([string(credentialsId: 'DOCKER_HUB_PASSWORD', variable: 'PASSWORD')]) {
+        sh 'docker login -u fallewi -p $PASSWORD'
+    }
+    stage("Push Image to Docker Hub"){
+        sh 'docker push  fallewi/terraform-ansible-jenkins-ci-cd:webk8sapp'
+    }
+	 stage("Create Kubernetes Cluster"){
+	    sh 'cd jenkins-k8s-ci-cd/Terrafrom/'
+        sh 'terraform apply --auto-approve'
+    }
+    stage("SSH Into k8s Server") {
+        def remote = [:]
+        remote.name = 'K8S_Master'
+        remote.host = 'ip-address'
+        remote.user = 'k8s-user'
+        remote.password = 'password'
+        remote.allowAnyHosts = true
+        stage('Put k8swebapp.yml onto k8smaster') {
+            sshPut remote: remote, from: 'k8swebapp.yml', into: '.'
+        }
+        stage('Deploy pod') {
+          sshCommand remote: remote, command: "kubectl apply -f k8swebapp.yml"
+        }
+    }
+}
